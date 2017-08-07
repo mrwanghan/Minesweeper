@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<title>Minesweeper</title>
+	<style>
+		* {
+			margin:0;
+			padding:0;
+		}
+		#saoLei {
+			margin: 10px auto;
+			border: 4px solid #333;
+			overflow: hidden;
+		}
+		#saoLei p {
+			width:36px;
+			height:36px;
+			line-height: 40px;
+			background:#ccc;
+			position:relative;
+			color:#fff;
+			text-align: center;
+			float:left;
+			border: 2px solid #BBB;
+			font-size: 24px;
+		}
+		#saoLei p.lei {
+			background: url(lei.jpg) no-repeat center;
+		}
+		#saoLei p::after {
+			content:attr(data-num);
+			position:absolute;
+			width:36px;
+			height:36px;
+			left:0;
+		}
+		#saoLei p.lei::after {
+			content:'';
+		}
+		#saoLei span {
+			position:absolute;
+			left:-1px;top:-1px;
+			width:36px;
+			height:36px;
+			background: url(fangkuai.jpg) no-repeat center;
+			cursor: pointer;
+			z-index: 1;
+			border: 2px solid #BBB;
+		}
+		#saoLei span:active {
+			background:#BBB;
+		}
+		#saoLei span.flag {
+			background: url(qi.jpg) no-repeat center;
+		}
+		#saoLei span.liang {
+			background: #eee;
+		}
+		#saoLei span.gameover {
+			background: none;
+		}
+		#biaoti {
+			text-align: center;
+		}
+		#results {
+			color: red;
+		}
+	</style>
+	
+	<script>
+		function SaoLei(row, col, n){                        		//行，列，雷数
+			this.rootEle = document.createElement('div');			//创建div
+			this.rootEle.setAttribute('id', 'saoLei');				//增加div的id属性
+			this.rootEle.oncontextmenu = function(){				//取消默认右键事件
+				return false;
+			};	
+			this.grids = [];                                  		//格子数组
+			this.row = row;                                  
+			this.col = col;
+			this.leiNum = n;
+			this.leiArr = [];
+			this.count = 0;
+			this.win = row * col - n;
+			this.init();
+		}
+		SaoLei.prototype = {										//在原型上增加扫雷
+			init:function () {
+				var self = this;
+				this.rootEle.innerHTML = '';						//清空元素属性
+				this.rootEle.style.cssText = 'height:' + this.row * 40 + 'px; width:' + this.col * 40 + 'px;'    //给元素增加样式
+				document.body.appendChild(this.rootEle);			//插入rootEle元素
+				
+				for (var i = 0; i < this.row; i++) {
+					var arr=[];
+					for (var k = 0; k < this.col; k++) {
+						var dP = document.createElement('p');		//创建p标签 每一个格子
+						dP.onmousedown = function() {				//点击事件
+							if(!this.flag){
+								this.flag = true;						//开关
+							}
+							var pos = self.getPos(this);				//自己的坐标
+							var arr = self.roundGrid(pos.x, pos.y);		//自己周围的8个坐标数组
+							var flag = self.flagNum(arr);				//雷
+							//判断输赢
+							if ( flag[0] == self.getNum(pos.x, pos.y) ) {
+								for (var i = 0; i < flag[1].length; i++) {
+									flag[1][i].getElementsByTagName('span')[0].style.display = 'none';
+									self.count++;
+									if (flag[1][i].className == 'lei') {
+										results.innerHTML = '你输了!';
+										gameover();
+										return;
+									}
+								}                                        
+								for(var j = 0; j < flag[1].length; j++){		//循环必须要分开。
+									var cPos = self.getPos(flag[1][j]);
+									var x = cPos.x, y = cPos.y;
+									if (self.getNum(x,y) == 0) {
+										self.bE(x, y);
+									}
+									if (self.count == self.win) {
+										results.innerHTML = '你赢了!';
+									}
+								}
+
+							}else{
+								self.toggleLight(arr,'liang');
+							}
+						}
+						dP.onmouseup = dP.onmousemove = function () {
+							if (this.flag) {
+								var pos = self.getPos(this);
+								self.toggleLight(self.roundGrid(pos.x,pos.y), '');
+								this.flag=false;
+							}
+						}
+						var dSpan = document.createElement('span');
+						function gameover() {
+							dSpan.style.background = "none";
+						}
+						dSpan.onmousedown = function(event) {
+							event.stopPropagation();
+							var btnNum = event.button;
+							if(btnNum == 2){
+								this.classList.toggle('flag');
+							}else if(btnNum == 0){
+								if (this.className == 'flag') {
+									this.className = '';
+									return;
+								}
+								this.style.display = 'none';
+								self.count++;
+								var pos = self.getPos(this);
+								var x = pos.x, y = pos.y;
+								if(getParentEle(this).className == 'lei'){
+									results.innerHTML = '你输了!';
+									gameover();
+									return ;
+								}
+								if(self.getNum(x,y) == 0) {
+									self.bE(x,y);
+								}
+							}
+							if(self.count == self.win){
+								results.innerHTML = '你赢了!';
+							}
+						}
+						dP.appendChild(dSpan);
+						dP.setAttribute('data-num', 0);
+						dP.setAttribute('data-pos', i + ',' + k);
+						arr.push(dP);
+						this.rootEle.appendChild(dP);
+					}
+					this.grids.push(arr);
+				}
+				for(var j = 0; j < this.leiNum; j++) {
+					this.createLei();
+				}
+			},
+			getPos: function(node) {
+				var pos = '';
+				var ele = node.nodeName == 'P' ? node: getParentEle(node);
+				pos = ele.getAttribute('data-pos').split(',');				//创建坐标标签
+				return {
+					x:parseInt(pos[0]),
+					y:parseInt(pos[1])
+				};
+			},
+			getNum: function(x, y) {
+				return parseInt(this.grids[x][y].getAttribute('data-num')); //该坐标周围雷数
+			},
+			createLei: function() {											//随机生成时雷
+				var x = Math.floor(Math.random() * this.row);
+				var y = Math.floor(Math.random() * this.col);
+				if(this.grids[x][y].className != 'lei') {
+					this.grids[x][y].className = 'lei';
+					this.leiArr.push(this.grids[x][y]);						//在雷数组内增加此坐标
+					this.updateNum(x,y);
+				}else{
+					this.createLei();
+				}
+			},
+			updateNum: function(x, y) {									//周围雷的个数加一
+				var roundArr = this.roundGrid(x,y), 
+					pos, 
+					self = this;
+				roundArr.forEach( function(ele, index, arr) {
+					pos = self.getPos(ele);
+					ele.setAttribute('data-num', self.getNum(pos.x,pos.y) + 1);
+				} )
+			},
+			roundGrid: function(x, y) {
+				var arr = [], 
+					self = this;
+				function isInAdd(n, m) {
+					if ( self.inGrid(n, m) ) {				//如果坐标存在，在arr数组内存储该坐标
+						arr.push(self.grids[n][m]);		
+					}
+				}
+				isInAdd(x-1, y-1);							//将该坐标周围的8个坐标存入arr数组，最终返回arr
+				isInAdd(x-1, y);
+				isInAdd(x-1, y+1);
+				isInAdd(x, y-1);
+				isInAdd(x, y+1);
+				isInAdd(x+1, y-1);
+				isInAdd(x+1, y);
+				isInAdd(x+1, y+1);
+				return arr;
+			},
+			inGrid: function(x,y){
+				return this.grids[x] != undefined && this.grids[x][y] != undefined;
+			},
+			bE: function(x,y){                                //蝴蝶效应
+				if (!this.bE.cache) {						  //利用缓存消除堆栈溢出
+					this.bE.cache = {};
+				}        
+				if (!this.bE.cache[x + '-' + y]){
+					this.bE.cache[x + '-' + y] = 1;
+				}else{
+					return;
+				};
+				var roundArr = this.roundGrid(x, y), 
+					self = this;
+				roundArr.forEach(function(ele,index,arr) {
+					var pos = self.getPos(ele);
+					hideSpan(pos.x,pos.y);
+				})
+				function hideSpan(x,y) {
+					if (self.inGrid(x,y)) {
+						if (self.grids[x][y].getElementsByTagName('span')[0].style.display != 'none') {
+							self.grids[x][y].getElementsByTagName('span')[0].style.display = 'none';		//已经点击
+							self.count++;
+						}
+						if (self.getNum(x,y) == 0 ) {
+							self.bE(x,y);
+						}
+					}
+				}
+			},
+			toggleLight: function (arr, classname) {
+				arr.forEach(function (ele, index) {
+					var childSpan = ele.getElementsByTagName('span')[0];
+					if(childSpan.style.display != 'none' && childSpan.className != 'flag') {	//没有雷也没有插旗
+						childSpan.className = classname;
+					}
+				})
+			},
+			flagNum: function(arr) {						
+				var n = 0, 										//雷的个数
+					arr1 = [];									//存储未点击方块坐标
+				for(var i = 0; i < arr.length; i++) {
+					if(arr[i].getElementsByTagName('span')[0].className == 'flag') {    
+						n++;
+						continue;
+					}
+					if(arr[i].getElementsByTagName('span')[0].style.display != 'none') {
+						arr1.push(arr[i]);
+					}
+				}
+				return [n,arr1];
+			},
+			
+
+		}
+	
+		function getParentEle(node) {						//使该节点的父节点是元素节点
+			if(node.parentNode.nodeType == 1 ){
+				return node.parentNode;
+			}else{
+				return getParentEle(node.parentNode);
+			}
+		}
+		
+
+
+	</script>
+</head>
+
+<body>
+	<div id="biaoti">
+		<h1>扫&nbsp&nbsp雷</h1>
+		<h3 id="results">&nbsp</h3>
+	</div>
+	<script>
+		window.onload = function() {
+			var sl = new SaoLei(10, 10, 10);        			//行 ，列 ，雷数
+		}	
+	</script>
+</body>
+</html>
